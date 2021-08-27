@@ -2,11 +2,6 @@ import subprocess, re, sys, numpy as np
 import matplotlib.pyplot as plt; plt.rcdefaults()
 from time import time
 
-# initialize strings
-addr = ""
-pings = ""
-threshold = ""
-
 # define regional IP addresses
 west_ip = "144.34.177.76"
 central_ip = "64.250.60.2"
