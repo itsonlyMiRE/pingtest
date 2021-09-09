@@ -14,11 +14,25 @@ try:
         pings = sys.argv[2]
         threshold = sys.argv[3]
 
+    # check for first hop as argument
+    if len(sys.argv) == 2 and (str(sys.argv[1]) == '-f'):
+        print('\n-f flag used, pinging first hop after gateway')
+        try:
+            tmp = str(subprocess.check_output("traceroute google.com -m 2", stderr=subprocess.STDOUT, shell=True))
+            addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(tmp))[0].split())[1:]
+            pings = 500
+            threshold = 60
+        except subprocess.CalledProcessError as e:
+            addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(e.output))[0].split())[1:]
+            pings = 500
+            threshold = 60
+
     # prompt user for parameters if improper args found
     else:
-        print("\n> NOTE: you can enter command line arguments as follows:\n> python3 pingtest.py [target IP or domain] [number of pings] [acceptable ping threshold in ms]")
+        print("\n> NOTE: you can enter command line arguments as follows:\n  python3 pingtest.py [target IP or domain] [number of pings] [acceptable ping threshold in ms]")
+        print("> OR to just test first hop, use -f flag (must have traceroute)")
         addr = input("\n> enter IP or domain to test (W/C/E for U.S. regional tests; blank for google.com): ")
-        pings = input("> enter number of pings (blank for 200): ")
+        pings = input("> enter number of pings (blank for 500): ")
         threshold = input("> enter acceptable ping in ms (blank for 60ms): ")
 
     # replace values for parameters
@@ -31,7 +45,7 @@ try:
     elif addr == 'E':
         addr = east_ip
     if pings == "":
-        pings = "200"
+        pings = "500"
     if threshold == "":
         threshold = "60"
 
