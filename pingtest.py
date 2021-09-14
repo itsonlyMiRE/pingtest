@@ -74,12 +74,15 @@ try:
     below_threshold = np.minimum(y, int(threshold))
 
     # create bar graph using data
+    plt.style.use("dark_background")
     try:
         fig, ax = plt.subplots()
         ax.bar(x, below_threshold, 0.35, color="g")
         ax.bar(x, above_threshold, 0.35, color="r",
                 bottom=below_threshold)
         ax.axhline(int(threshold), color="gray")
+        ax.set_ylabel('Ping times (ms)')
+        ax.set_xlabel('Pings')
     except ValueError:
         print("> OOPS! ValueError, something went wrong. Try again.\n")
         exit()
