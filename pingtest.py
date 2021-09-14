@@ -91,4 +91,3 @@ try:
 
 except KeyboardInterrupt:
     print("\n")
-    exit()
