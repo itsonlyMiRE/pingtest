@@ -15,7 +15,7 @@ try:
         threshold = sys.argv[3]
 
     # check for first hop as argument
-    if len(sys.argv) == 2 and (str(sys.argv[1]) == '-f'):
+    elif len(sys.argv) == 2 and (str(sys.argv[1]) == '-f'):
         print('\n-f flag used, pinging first hop after gateway')
         try:
             tmp = str(subprocess.check_output("traceroute google.com -m 2", stderr=subprocess.STDOUT, shell=True))
@@ -60,9 +60,13 @@ try:
 
     # extract ping data from output
     times = re.findall("time=\d+\.*\d* ms", output)
+    late_count = 0
     for i in range(len(times)):
         times[i] = round(float(times[i].replace("time=", "").replace(" ms", "")))
-
+        if times[i] > int(threshold):
+            late_count += 1
+    late_pct = late_count / int(pings)
+    
     # set x and y values
     x=[]
     for i in range(1,len(times)+1):
@@ -89,6 +93,7 @@ try:
 
     # closing, show graph
     print("> time elapsed:", str(round(time() - start, ndigits=3)), "seconds")
+    print("> late packets: " + str(late_count) + "(" + str(late_pct*100) + "%)")
     print("> showing charted results...\n")
     plt.show()
 
