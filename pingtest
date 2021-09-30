@@ -1,0 +1,256 @@
+#!/usr/bin/env python3
+
+import subprocess, re, numpy as np, sys, argparse
+import matplotlib.pyplot as plt; plt.rcdefaults()
+from time import sleep
+from tkinter import *
+from tkinter import ttk
+from threading import Thread
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+'''
+TODO:
+    - add progress bar to GUI version
+'''
+
+########## BEGIN handling command line arguments ##########
+parser = argparse.ArgumentParser(description='Pingtest program by mire.', prog='pingtest')
+parser.add_argument('-G', help='use GUI (all other flags are ignored if this is used)', action='store_true')
+parser.add_argument('-a', help='address to ping (or use \'-a F\' to use first hop router)', metavar='<address>')
+parser.add_argument('-d', help='duration of test (DEFAULT: 10)', metavar='<seconds>', type=int)
+parser.add_argument('-f', help='frequency in pings per second (DEFAULT: 50)', metavar='<pings/second>', type=int)
+parser.add_argument('-t', help='threshold of acceptable ping time (DEFAULT: 60)', metavar='<milliseconds>', type=int)
+args = parser.parse_args()
+if args.a == 'F':
+    try:
+        tmp = str(subprocess.check_output('traceroute google.com -m 2', stderr=subprocess.STDOUT, shell=True))
+        _addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(tmp))[0].split())[1:]
+    except subprocess.CalledProcessError as e:
+        _addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(e.output))[0].split())[1:]
+else:
+    _addr = args.a
+if args.f == None:
+    _freq = round(1 / 50, 2)
+else:
+    _freq = round(1 / args.f, 2)
+if args.d == None:
+    _duration = 10
+else:
+    _duration = args.d
+if args.t == None:
+    _threshold = 60
+else:
+    _threshold = args.t
+_num_pings = round(_duration / _freq)
+########## END handling command line arguments ##########
+
+''' def progress(duration):
+    while prog_bar['value'] < 100:
+        prog_bar['value'] += 1
+        value_label['text'] = update_progress_label()
+        root.update_idletasks()
+        sleep(duration/100)
+
+def update_progress_label():
+    return f'Progress: {round(prog_bar['value'])}%' '''
+
+def progress(duration):
+    value = 1
+    print()
+    while value <= 100:
+        print('|' + '*'*value + ' '*(100-value) + '|  ' + str(value) + '%', end='\r')
+        sleep(duration/100)
+        value+=1
+    print('\n')
+
+def generate_graph(threshold, times):
+    # set x and y values
+    x=[]
+    for i in range(1,len(times)+1):
+        x.append(i)
+    y = np.array(times)
+
+    # define thresholds
+    above_threshold = np.maximum(y - int(threshold), 0)
+    below_threshold = np.minimum(y, int(threshold))
+
+    # create bar graph using data
+    plt.style.use('dark_background')
+
+    try:
+        fig, ax = plt.subplots(1,1,figsize=(11,6))
+        ax.bar(x, below_threshold, 0.35, color='g')
+        ax.bar(x, above_threshold, 0.35, color='r',
+                bottom=below_threshold)
+        ax.axhline(int(threshold), color='gray')
+        ax.set_ylabel('Ping times (ms)')
+        ax.set_xlabel('Pings')
+    except ValueError:
+        print('> OOPS! ValueError, something went wrong. Try again.\n')
+        exit()
+
+    if args.G == True:
+        # draw plot
+        canvas = FigureCanvasTkAgg(fig, master = root)  
+        canvas.draw()
+        # placing the canvas on the Tkinter window
+        canvas.get_tk_widget().grid(row=1,column=3,rowspan=10,padx=30,pady=15)
+    else:
+        plt.show()
+
+def perform_pingtest(addr, freq, num_pings, threshold):
+    try:
+        output = str(subprocess.check_output(f'sudo ping {addr} -i {freq} -c {num_pings}', stderr=subprocess.STDOUT, shell=True))
+    except subprocess.CalledProcessError as e:
+        print('> Error running ping test (probably due to invalid address)\n')
+        return 0
+    if output != '0':
+        # extract ping summary from end of output and print
+        times_summary = re.findall('rtt min/avg/max/mdev = .* ms', output)
+        if args.G == False:
+            print(f'> ping summary: {times_summary[0]}')
+        else:
+            info_box.config(state='normal')
+            info_box.insert(END, f'\n> ping summary: {times_summary[0]}')
+            info_box.config(state='disabled')
+        # extract ping data from output
+        times = re.findall('time=\d+\.*\d* ms', output)
+        late_count = 0
+        for i in range(len(times)):
+            times[i] = round(float(times[i].replace('time=', '').replace(' ms', '')))
+            if times[i] > int(threshold):
+                late_count += 1
+        late_pct = late_count / int(num_pings)
+        if args.G == False:
+            print('> late packets: ' + str(late_count) + ' (' + str(round((late_pct*100), 2)) + '%)')
+            print('> showing charted results...\n')
+        else:
+            info_box.config(state='normal')
+            info_box.insert(END, '\n> late packets: ' + str(late_count) + ' (' + str(round((late_pct*100), 2)) + '%)\n')
+            info_box.insert(END, '> showing charted results...\n')
+            info_box.config(state='disabled')
+        return times
+    else:
+        return 0
+    
+def _run():
+    # assign parameters of test
+    addr = text_box.get()
+    if addr == '':
+        try:
+            tmp = str(subprocess.check_output('traceroute google.com -m 2', stderr=subprocess.STDOUT, shell=True))
+            addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(tmp))[0].split())[1:]
+        except subprocess.CalledProcessError as e:
+            addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(e.output))[0].split())[1:]
+    freq = round(1 / freq_slider.get(), 2)
+    duration = duration_slider.get()
+    threshold = threshold_slider.get()
+    num_pings = round(duration / freq)
+    
+    # begin pinging using chosen arguments
+    info_box.config(state='normal')
+    info_box.delete('1.0', END)
+    info_box.insert(END, f'> starting {num_pings} pings on {addr}...\n')
+    info_box.config(state='disabled')
+    root.update_idletasks()
+    data = perform_pingtest(addr, freq, num_pings, threshold)
+    
+    # generate and show graph
+    if data != 0:
+        generate_graph(threshold, data)
+    else:
+        info_box.config(state='normal')
+        info_box.insert(END, '\n> error occurred in ping test\n')
+        info_box.config(state='disabled')
+
+if __name__ == '__main__':
+    # if GUI is used, begin making Tkinter stuff
+    if args.G == True:
+        root = Tk()
+        root.title('Pingtest GUI')
+        root.geometry('1600x920')
+        root.configure(bg='#292929')
+
+        # blank row separator
+        blank1 = Label(root, text='', bg='#292929')
+        blank1.grid(padx=20, pady=20, row=1, column=1)
+
+        # text boss for address input
+        box_label = Label(root, text='Address to Ping (leave blank for first hop router)', bg='#292929', fg='#FFFFFF')
+        box_label.grid(row=2, column=1)
+        text_box = Entry(root)
+        text_box.grid(padx=20, row=3, column=1)
+
+        # blank row separator
+        blank2 = Label(root, text='', bg='#292929')
+        blank2.grid(padx=20, pady=5, row=4, column=1)
+
+        # blank row separator
+        blank3 = Label(root, text='', bg='#292929')
+        blank3.grid(padx=20, row=0, column=3)
+
+        # ping frequency slider
+        freq_slider = Scale(root, from_=1, to=50, length=400, resolution=1, orient=HORIZONTAL, label='Frequency (pings/second)', bg='#292929', fg='#FFFFFF')
+        freq_slider.set(50)
+        freq_slider.grid(padx=20, pady=20, row=5, column=1)
+
+        # test duration slider
+        duration_slider = Scale(root, from_=1, to=120, length=400, resolution=1, orient=HORIZONTAL, label='Duration (seconds)', bg='#292929', fg='#FFFFFF')
+        duration_slider.set(10)
+        duration_slider.grid(padx=20, pady=20, row=6, column=1)
+
+        # acceptable ping slider
+        threshold_slider = Scale(root, from_=5, to=150, length=400, resolution=1, orient=HORIZONTAL, label='Acceptable Delay (ms)', bg='#292929', fg='#FFFFFF')
+        threshold_slider.set(60)
+        threshold_slider.grid(padx=20, pady=20, row=7, column=1)
+
+        # start button
+        start_button = Button(root, text='Start Test', command=_run)
+        start_button.grid(padx=20, pady=40, row=8, column=1)
+
+        # progress bar
+        ''' prog_bar = ttk.Progressbar(
+            root,
+            orient='horizontal',
+            mode='determinate',
+            length=280
+        )
+        prog_bar.grid(column=1, row=9, padx=10, pady=10)
+
+        # progress bar label
+        value_label = ttk.Label(root, text=update_progress_label(),  background='#292929', foreground='#FFFFFF')
+        value_label.grid(padx=20, column=1, row=10) '''
+
+        # info printout box
+        info_box = Text(
+            root,
+            height=12,
+            width=100,
+            background='#d6d6d6',
+            foreground='#000000'
+        )
+        info_box.grid(row=11, column=1, padx=20, pady=20, columnspan=5)
+        info_box.insert('end', '> program started')
+        info_box.config(state='disabled')
+        # initialize blank graph
+        generate_graph(1,[0]*100)
+
+        print('> Launching GUI...\n')
+        root.mainloop()
+    
+    # if GUI is not used, perform in CLI
+    else:
+        if args.a == None:
+            print('\nERROR: one of the two flags -a or -G must be used. Use -h flag for help.\n')
+        else:
+            print(f'\n> starting {_num_pings} pings on {_addr}...')
+            prog = Thread(target=progress, args=(_duration,))
+            prog.start()
+            data = perform_pingtest(_addr, _freq, _num_pings, _threshold)
+            prog.join()
+            if data != 0:
+                generate_graph(_threshold, data)
+            else:
+                print("> error occurred in ping test\n")
+
+# EOF
