@@ -4,11 +4,22 @@ A personal project for testing internet stability, intended for use in Linux. Wh
 
 This program now includes GUI functionality. See Usage for more details.
 ## Setup
-This script is written in Python3 and requires the Python3 modules `numpy` and `matplotlib`. Clone the repository and use the command `chmod a+x pingtest` to make the program executable.
+This script is written in Python3.
+
+The requirements can be installed with the following commands:
+```
+sudo apt install python3-tk &&
+sudo apt install traceroute &&
+pip install matplotlib &&
+pip install numpy
+```
+Modify as needed depending on your package manager.
+
+Clone the repository and use the command `chmod a+x pingtest` to make the program executable.
 ## Usage
 NOTE: Requires sudo privileges due to small intervals used in the `ping` command. If you do not run the program with sudo, it may prompt you for your password during runtime.
 
-After following Setup notes, simply run with `./pingtest`.
+After following Setup notes, run with `./pingtest` followed by any desired flags.
 
 The program now uses command line flags/arguments to set the parameters of the test. Help can be displayed with `./pingtest -h`:
 ```
