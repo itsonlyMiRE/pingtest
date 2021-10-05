@@ -13,6 +13,10 @@ TODO:
     - add progress bar to GUI version
 '''
 
+def invalid_input():
+    print('ERROR: one or more parameters are invalid. Use -h to display valid input range.\n')
+    exit()
+
 ########## BEGIN handling command line arguments ##########
 parser = argparse.ArgumentParser(description='Pingtest program by mire.', prog='pingtest')
 parser.add_argument('-G', help='use GUI (all other flags are ignored if this is used)', action='store_true')
@@ -32,14 +36,20 @@ else:
 if args.f == None:
     _freq = round(1 / 50, 2)
 else:
+    if (int(args.f) < 1) or (int(args.f) > 50):
+        invalid_input()
     _freq = round(1 / args.f, 2)
 if args.d == None:
     _duration = 10
 else:
+    if (args.d < 1) or (args.d > 120):
+        invalid_input()
     _duration = args.d
 if args.t == None:
     _threshold = 60
 else:
+    if (args.t < 1) or (args.t > 1000):
+        invalid_input()
     _threshold = args.t
 _num_pings = round(_duration / _freq)
 ########## END handling command line arguments ##########
@@ -244,13 +254,17 @@ if __name__ == '__main__':
             print('\nERROR: one of the two flags -a or -G must be used. Use -h flag for help.\n')
         else:
             print(f'\n> starting {_num_pings} pings on {_addr}...')
-            prog = Thread(target=progress, args=(_duration,))
-            prog.start()
-            data = perform_pingtest(_addr, _freq, _num_pings, _threshold)
-            prog.join()
-            if data != 0:
-                generate_graph(_threshold, data)
-            else:
-                print("> error occurred in ping test\n")
+            try:
+                test_ping = str(subprocess.check_output(f'sudo ping {_addr} -c 1', stderr=subprocess.STDOUT, shell=True))
+                prog = Thread(target=progress, args=(_duration,))
+                prog.start()
+                data = perform_pingtest(_addr, _freq, _num_pings, _threshold)
+                prog.join()
+                if data != 0:
+                    generate_graph(_threshold, data)
+                else:
+                    print("> error occurred in ping test\n")
+            except subprocess.CalledProcessError as e:
+                print('> Error running ping test (probably due to invalid address)\n')
 
 # EOF
