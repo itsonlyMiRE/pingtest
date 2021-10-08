@@ -108,11 +108,12 @@ def update_progress_label():
 
 def progress(duration):
     value = 1
+    size = 50
     print()
     timestamp = time()
-    while value <= 100:
-        print('|' + '*'*value + ' '*(100-value) + '|  ' + str(value) + '%\ttime left: ' + str(int(duration)-(round(time() - timestamp))) + 's', end='   \r')
-        sleep(duration/100)
+    while value <= size:
+        print('|' + '*'*value + ' '*(size-value) + '|  ' + str(round(value/size*100)) + '%\ttime left: ' + str(int(duration)-(round(time() - timestamp))) + 's', end='   \r')
+        sleep(duration/size)
         value+=1
     print('\n')
 
