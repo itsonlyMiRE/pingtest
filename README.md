@@ -15,15 +15,15 @@ pip install numpy
 ```
 Modify as needed depending on your package manager. For Windows, `tracert` is used instead of `traceroute`, and it should already be installed. Tkinter also might be installed with Python3, I'm not entirely sure as I've seen it both ways.
 
-On Linux, clone the repository and use the command `chmod a+x pingtest` to make the program executable.
+On Linux, clone the repository and either run `pingtest` file with Python3, or use the command `chmod a+x pingtest` to make the program executable as a script.
 
-On Windows, clone the repository and rename the script from `pingtest` to `pingtest.py` and run with Python3.
+On Windows, clone the repository and run `pingtest` file with Python3.
 ## Usage
 NOTE: On Linux, if threading isn't used, requires sudo privileges due to small intervals used in the `ping` command. If you run the program with neither sudo nor threading, it may prompt you for your password during runtime.
 
 NOTE: On Windows, if threading isn't used, the maximum interval between pings is just one second. This nearly defeats the purpose of the program, so utilizing the `-T` flag to enable threading is highly recommended, as this allows for more than one ping per second.
 
-After following Setup notes, run with `./pingtest` on Linux or `python pingtest.py` on Windows, followed by any desired flags.
+After following Setup notes, run with `./pingtest` or `python3 pingtest` on Linux, or `python pingtest.py` on Windows, followed by any desired flags.
 
 The program now uses command line flags/arguments to set the parameters of the test. Help can be displayed with `./pingtest -h`:
 ```
