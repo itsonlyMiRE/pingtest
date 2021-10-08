@@ -2,15 +2,20 @@
 
 import subprocess, re, numpy as np, sys, argparse
 import matplotlib.pyplot as plt; plt.rcdefaults()
-from time import sleep
+from time import sleep,time
 from tkinter import *
 from tkinter import ttk
 from threading import Thread
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+_OS = sys.platform
+if _OS != 'linux' and _OS != 'win32':
+    exit('> OS not recognized or not supported.\n')
 
 '''
 TODO:
-    - add progress bar to GUI version
+    - add progress bar to GUI version :)
+    - fix GUI on Windows (getting ping errors)
+    - add tick box to toggle threading in GUI
 '''
 
 def invalid_input():
@@ -18,33 +23,71 @@ def invalid_input():
     exit()
 
 ########## BEGIN handling command line arguments ##########
-parser = argparse.ArgumentParser(description='Pingtest program by mire.', prog='pingtest')
+parser = argparse.ArgumentParser(description='''
+ ____ ____  ____    ____  ______    ___  _____ ______ 
+|    \    ||    \  /    ||      |  /  _]/ ___/|      |
+|  o  )  | |  _  ||   __||      | /  [_(   \_ |      |
+|   _/|  | |  |  ||  |  ||_|  |_||    _]\__  ||_|  |_|
+|  |  |  | |  |  ||  |_ |  |  |  |   [_ /  \ |  |  |  
+|  |  |  | |  |  ||     |  |  |  |     |\    |  |  |  
+|__| |____||__|__||___,_|  |__|  |_____| \___|  |__|  
+                                                      
+Pingtest program by mire\nhttps://github.com/itsonlyMiRE/pingtest\n''', prog='pingtest', formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('-G', help='use GUI (all other flags are ignored if this is used)', action='store_true')
 parser.add_argument('-a', help='address to ping (or use \'-a F\' to use first hop router)', metavar='<address>')
 parser.add_argument('-d', help='duration of test (DEFAULT: 10)', metavar='<seconds>', type=int)
-parser.add_argument('-f', help='frequency in pings per second (DEFAULT: 50)', metavar='<pings/second>', type=int)
+parser.add_argument('-f', help='frequency in pings per second (DEFAULT: 50, but 1 on Windows unless using threading)', metavar='<pings/second>', type=int)
 parser.add_argument('-t', help='threshold of acceptable ping time (DEFAULT: 60)', metavar='<milliseconds>', type=int)
+parser.add_argument('-T', help='enable threading approach (highly recommended for Windows users)', action='store_true')
 args = parser.parse_args()
+# target address
 if args.a == 'F':
     try:
-        tmp = str(subprocess.check_output('traceroute google.com -m 2', stderr=subprocess.STDOUT, shell=True))
-        _addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(tmp))[0].split())[1:]
+        # find first hop, handle OS properly
+        if _OS == 'linux':
+            tmp = str(subprocess.check_output('traceroute google.com -m 2', stderr=subprocess.STDOUT, shell=True))
+            first_hop = re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(tmp))
+        elif _OS == 'win32':
+            tmp = str(subprocess.check_output('tracert -4 -h 2 google.com', stderr=subprocess.STDOUT, shell=True))
+            first_hop_line = re.findall('2\s+\d+\sms\s+\d+\sms\s+\d+\sms\s+\d+.\d+.\d+.\d+', str(tmp))[0]
+            first_hop = re.findall('s\s+\d+.\d+.\d+.\d+', first_hop_line)
+        
+        if len(first_hop) != 0:
+            _addr = ''.join(first_hop[0].split())[1:]
+        else:
+            exit('> error retrieving first hop router. try again\n')
     except subprocess.CalledProcessError as e:
-        _addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(e.output))[0].split())[1:]
+        first_hop = re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(e.output))
+        if len(first_hop) != 0:
+            _addr = ''.join(first_hop[0].split())[1:]
+        else:
+            exit('> error retrieving first hop router. try again')
 else:
     _addr = args.a
+# frequency
 if args.f == None:
-    _freq = round(1 / 50, 2)
-else:
-    if (int(args.f) < 1) or (int(args.f) > 50):
-        invalid_input()
-    _freq = round(1 / args.f, 2)
+    if _OS == 'linux':
+        _freq = round(1 / 50, 2)
+    elif _OS == 'win32':
+        _freq = 1
+elif args.f and _OS == 'win32' and not args.T:
+    print('> frequency is not supported on Windows without threading enabled (-T)\n')
+    exit()
+else:    
+    if _OS == 'linux':
+        if (int(args.f) < 1) or (int(args.f) > 50):
+            invalid_input()
+        _freq = round(1 / args.f, 2)
+    elif _OS == 'win32':
+        _freq = 1
+# duration
 if args.d == None:
     _duration = 10
 else:
     if (args.d < 1) or (args.d > 120):
         invalid_input()
     _duration = args.d
+# threshold
 if args.t == None:
     _threshold = 60
 else:
@@ -53,6 +96,7 @@ else:
     _threshold = args.t
 _num_pings = round(_duration / _freq)
 ########## END handling command line arguments ##########
+
 
 ''' def progress(duration):
     while prog_bar['value'] < 100:
@@ -67,8 +111,9 @@ def update_progress_label():
 def progress(duration):
     value = 1
     print()
+    timestamp = time()
     while value <= 100:
-        print('|' + '*'*value + ' '*(100-value) + '|  ' + str(value) + '%', end='\r')
+        print('|' + '*'*value + ' '*(100-value) + '|  ' + str(value) + '%\ttime left: ' + str(int(duration)-(round(time() - timestamp))) + 's', end='   \r')
         sleep(duration/100)
         value+=1
     print('\n')
@@ -108,38 +153,67 @@ def generate_graph(threshold, times):
     else:
         plt.show()
 
-def perform_pingtest(addr, freq, num_pings, threshold):
+late_count = []
+_times = []
+
+def send_ping(addr):
     try:
-        output = str(subprocess.check_output(f'sudo ping {addr} -i {freq} -c {num_pings}', stderr=subprocess.STDOUT, shell=True))
+        if _OS == 'linux':
+            _times.append(round(float(re.findall('time=\d+\.*\d* ms', (str(subprocess.check_output(f'ping {addr} -c 1', stderr=subprocess.STDOUT, shell=True))))[0].replace('time=', '').replace(' ms', ''))))
+        elif _OS == 'win32':
+            _times.append(round(float(re.findall('time=\d+\.*\d*ms', (str(subprocess.check_output(f'ping -n 1 {addr}', stderr=subprocess.STDOUT, shell=True))))[0].replace('time=', '').replace('ms', ''))))
     except subprocess.CalledProcessError as e:
-        print('> Error running ping test (probably due to invalid address)\n')
+        print('> Error running ping test (possibly due to invalid address)\n')
         return 0
-    if output != '0':
-        # extract ping summary from end of output and print
-        times_summary = re.findall('rtt min/avg/max/mdev = .* ms', output)
+    
+    if _times[-1] > int(_threshold):
+        late_count.append(None)
+
+def perform_pingtest(addr, freq, num_pings, threshold):
+    # threading approach
+    if not args.G:
+        prog = Thread(target=progress, args=(_duration,))
+        prog.start()
+    if args.T:
+        ping_threads = [None]*num_pings
+        for i in range(int(num_pings)):
+            ping_threads[i] = Thread(target=send_ping, args=(addr,))
+            ping_threads[i].start()
+            sleep(float(_freq))
+        for i in range(int(num_pings)):
+            ping_threads[i].join()
+        sleep(.5)
+    # non-threading approach
+    else:
+        try:
+            if _OS == 'linux':
+                output = re.findall('time=\d+\.*\d* ms', str(subprocess.check_output(f'sudo ping {addr} -i {freq} -c {num_pings}', stderr=subprocess.STDOUT, shell=True)))
+                for i in range(len(output)):
+                    _times.append(round(float(output[i].replace('time=', '').replace(' ms', ''))))
+                    if _times[-1] > int(_threshold):
+                        late_count.append(None)
+            elif _OS == 'win32':
+                output = re.findall('time=\d+\.*\d*ms', str(subprocess.check_output(f'ping -n {num_pings} {addr}', stderr=subprocess.STDOUT, shell=True)))
+                for i in range(len(output)):
+                    _times.append(round(float(output[i].replace('time=', '').replace('ms', ''))))
+                    if _times[-1] > int(_threshold):
+                        late_count.append(None)
+        except subprocess.CalledProcessError as e:
+            print('> Error running ping test (possibly due to invalid address)\n')
+            return 0
+    if not args.G:
+        prog.join()
+    if len(_times) != '0':
+        late_pct = len(late_count) / int(num_pings)
         if args.G == False:
-            print(f'> ping summary: {times_summary[0]}')
-        else:
-            info_box.config(state='normal')
-            info_box.insert(END, f'\n> ping summary: {times_summary[0]}')
-            info_box.config(state='disabled')
-        # extract ping data from output
-        times = re.findall('time=\d+\.*\d* ms', output)
-        late_count = 0
-        for i in range(len(times)):
-            times[i] = round(float(times[i].replace('time=', '').replace(' ms', '')))
-            if times[i] > int(threshold):
-                late_count += 1
-        late_pct = late_count / int(num_pings)
-        if args.G == False:
-            print('> late packets: ' + str(late_count) + ' (' + str(round((late_pct*100), 2)) + '%)')
+            print('> late packets: ' + str(len(late_count)) + ' (' + str(round((late_pct*100), 2)) + '%)')
             print('> showing charted results...\n')
         else:
             info_box.config(state='normal')
-            info_box.insert(END, '\n> late packets: ' + str(late_count) + ' (' + str(round((late_pct*100), 2)) + '%)\n')
+            info_box.insert(END, '\n> late packets: ' + str(len(late_count)) + ' (' + str(round((late_pct*100), 2)) + '%)\n')
             info_box.insert(END, '> showing charted results...\n')
             info_box.config(state='disabled')
-        return times
+        return _times
     else:
         return 0
     
@@ -147,11 +221,15 @@ def _run():
     # assign parameters of test
     addr = text_box.get()
     if addr == '':
-        try:
+        # find first hop, handle OS properly
+        if _OS == 'linux':
             tmp = str(subprocess.check_output('traceroute google.com -m 2', stderr=subprocess.STDOUT, shell=True))
-            addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(tmp))[0].split())[1:]
-        except subprocess.CalledProcessError as e:
-            addr = ''.join(re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(e.output))[0].split())[1:]
+            first_hop = re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(tmp))
+        elif _OS == 'win32':
+            tmp = str(subprocess.check_output('tracert -4 -h 2 google.com', stderr=subprocess.STDOUT, shell=True))
+            #tmp = '2\t313 ms\t\t25 ms\t\t 275 ms\t\t 10.134.0.1'
+            first_hop_line = re.findall('2\s+\d+\sms\s+\d+\sms\s+\d+\sms\s+\d+.\d+.\d+.\d+', str(tmp))[0]
+            first_hop = re.findall('s\s+\d+.\d+.\d+.\d+', first_hop_line)
     freq = round(1 / freq_slider.get(), 2)
     duration = duration_slider.get()
     threshold = threshold_slider.get()
@@ -255,16 +333,16 @@ if __name__ == '__main__':
         else:
             print(f'\n> starting {_num_pings} pings on {_addr}...')
             try:
-                test_ping = str(subprocess.check_output(f'sudo ping {_addr} -c 1', stderr=subprocess.STDOUT, shell=True))
-                prog = Thread(target=progress, args=(_duration,))
-                prog.start()
+                if _OS == 'linux':
+                    test_ping = str(subprocess.check_output(f'ping {_addr} -c 1', stderr=subprocess.STDOUT, shell=True))
+                elif _OS == 'win32':
+                    test_ping = str(subprocess.check_output(f'ping -n 1 {_addr}', stderr=subprocess.STDOUT, shell=True))
                 data = perform_pingtest(_addr, _freq, _num_pings, _threshold)
-                prog.join()
                 if data != 0:
                     generate_graph(_threshold, data)
                 else:
                     print("> error occurred in ping test\n")
             except subprocess.CalledProcessError as e:
-                print('> Error running ping test (probably due to invalid address)\n')
+                print('> Error running ping test (possibly due to invalid address)\n')
 
 # EOF
