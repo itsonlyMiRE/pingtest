@@ -171,8 +171,9 @@ def perform_pingtest(addr, freq, num_pings, threshold):
     use_threading = False
     if args.T and not args.G:
         use_threading = True
-    if thread_tick_value.get() and args.G:
-        use_threading = True
+    if args.G:
+        if thread_tick_value.get():
+            use_threading = True
     # threading approach
     if not args.G:
         prog = Thread(target=progress, args=(_duration,))
