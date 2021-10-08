@@ -14,8 +14,6 @@ if _OS != 'linux' and _OS != 'win32':
 '''
 TODO:
     - add progress bar to GUI version :)
-    - fix GUI on Windows (getting ping errors)
-    - add tick box to toggle threading in GUI
 '''
 
 def invalid_input():
@@ -163,23 +161,28 @@ def send_ping(addr):
         elif _OS == 'win32':
             _times.append(round(float(re.findall('time=\d+\.*\d*ms', (str(subprocess.check_output(f'ping -n 1 {addr}', stderr=subprocess.STDOUT, shell=True))))[0].replace('time=', '').replace('ms', ''))))
     except subprocess.CalledProcessError as e:
-        print('> Error running ping test (possibly due to invalid address)\n')
+        print('> Error running ping test (possibly due to lost packet or invalid address)\n')
         return 0
     
     if _times[-1] > int(_threshold):
         late_count.append(None)
 
 def perform_pingtest(addr, freq, num_pings, threshold):
+    use_threading = False
+    if args.T and not args.G:
+        use_threading = True
+    if thread_tick_value.get() and args.G:
+        use_threading = True
     # threading approach
     if not args.G:
         prog = Thread(target=progress, args=(_duration,))
         prog.start()
-    if args.T:
+    if use_threading:
         ping_threads = [None]*num_pings
         for i in range(int(num_pings)):
             ping_threads[i] = Thread(target=send_ping, args=(addr,))
             ping_threads[i].start()
-            sleep(float(_freq))
+            sleep(float(freq))
         for i in range(int(num_pings)):
             ping_threads[i].join()
         sleep(.5)
@@ -230,6 +233,10 @@ def _run():
             #tmp = '2\t313 ms\t\t25 ms\t\t 275 ms\t\t 10.134.0.1'
             first_hop_line = re.findall('2\s+\d+\sms\s+\d+\sms\s+\d+\sms\s+\d+.\d+.\d+.\d+', str(tmp))[0]
             first_hop = re.findall('s\s+\d+.\d+.\d+.\d+', first_hop_line)
+        if len(first_hop) != 0:
+            addr = ''.join(first_hop[0].split())[1:]
+        else:
+            exit('> error retrieving first hop router. try again\n')
     freq = round(1 / freq_slider.get(), 2)
     duration = duration_slider.get()
     threshold = threshold_slider.get()
@@ -278,23 +285,32 @@ if __name__ == '__main__':
         blank3.grid(padx=20, row=0, column=3)
 
         # ping frequency slider
-        freq_slider = Scale(root, from_=1, to=50, length=400, resolution=1, orient=HORIZONTAL, label='Frequency (pings/second)', bg='#292929', fg='#FFFFFF')
+        freq_slider = Scale(root, from_=1, to=50, length=400, resolution=1, orient=HORIZONTAL, label='Frequency (pings/second)', bg='#292929', fg='#FFFFFF', highlightbackground='#292929')
         freq_slider.set(50)
         freq_slider.grid(padx=20, pady=20, row=5, column=1)
 
         # test duration slider
-        duration_slider = Scale(root, from_=1, to=120, length=400, resolution=1, orient=HORIZONTAL, label='Duration (seconds)', bg='#292929', fg='#FFFFFF')
+        duration_slider = Scale(root, from_=1, to=120, length=400, resolution=1, orient=HORIZONTAL, label='Duration (seconds)', bg='#292929', fg='#FFFFFF', highlightbackground='#292929')
         duration_slider.set(10)
         duration_slider.grid(padx=20, pady=20, row=6, column=1)
 
         # acceptable ping slider
-        threshold_slider = Scale(root, from_=5, to=150, length=400, resolution=1, orient=HORIZONTAL, label='Acceptable Delay (ms)', bg='#292929', fg='#FFFFFF')
+        threshold_slider = Scale(root, from_=5, to=150, length=400, resolution=1, orient=HORIZONTAL, label='Acceptable Delay (ms)', bg='#292929', fg='#FFFFFF', highlightbackground='#292929')
         threshold_slider.set(60)
         threshold_slider.grid(padx=20, pady=20, row=7, column=1)
 
         # start button
         start_button = Button(root, text='Start Test', command=_run)
         start_button.grid(padx=20, pady=40, row=8, column=1)
+
+        # threading tick box
+        thread_tick_value = BooleanVar()
+        threading_tick = Checkbutton(root, text='Use threading (highly recommended for Windows)',
+                                        bg='#292929', fg='#FFFFFF', activebackground='#292929', 
+                                        activeforeground='#FFFFFF', highlightcolor='#292929', 
+                                        highlightbackground='#292929', selectcolor='#000000',
+                                        variable=thread_tick_value)
+        threading_tick.grid(row=9, column=1)
 
         # progress bar
         ''' prog_bar = ttk.Progressbar(
