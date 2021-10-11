@@ -108,7 +108,7 @@ def update_progress_label():
 
 def progress(duration):
     value = 1
-    size = 50
+    size = 50 # number of * in progress bar
     print()
     timestamp = time()
     while value <= size:
