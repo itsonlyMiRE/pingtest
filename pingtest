@@ -1,29 +1,46 @@
 #!/usr/bin/env python3
 
-import subprocess, re, numpy as np, sys, argparse
-import matplotlib.pyplot as plt; plt.rcdefaults()
-from time import sleep,time
-from tkinter import *
-from tkinter import ttk
-from threading import Thread
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-_OS = sys.platform
-if _OS != 'linux' and _OS != 'win32':
-    exit('> OS not recognized or not supported.\n')
-
 '''
+PROGRAM:
+pingtest
+
+AUTHOR:
+mire
+
+DESCRIPTION:
+A personal project for testing internet stability, intended for use in Linux and Windows.
+
 TODO:
     - add progress bar to GUI version :)
     - add macOS support
     - rewrite the whole damn thing in C++ to build a convenient executable (accessibility)
 '''
 
+import sys
+import argparse
+import subprocess
+import re
+from time import sleep,time
+from tkinter import Tk, Text, Label, Entry, Scale, Button, Checkbutton, BooleanVar, HORIZONTAL, END
+from threading import Thread
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
+import matplotlib.pyplot as plt
+plt.rcdefaults()
+
+_OS = sys.platform
+if _OS not in ('linux', 'win32'):
+    sys.exit('> OS not recognized or not supported.\n')
+
 def invalid_input():
+    """
+    Function to call to catch invalid input.
+    """
     print('ERROR: one or more parameters are invalid. Use -h to display valid input range.\n')
-    exit()
+    sys.exit()
 
 ########## BEGIN handling command line arguments ##########
-parser = argparse.ArgumentParser(description='''
+parser = argparse.ArgumentParser(description=r'''
  ____ ____  ____    ____  ______    ___  _____ ______ 
 |    \    ||    \  /    ||      |  /  _]/ ___/|      |
 |  o  )  | |  _  ||   __||      | /  [_(   \_ |      |
@@ -32,40 +49,63 @@ parser = argparse.ArgumentParser(description='''
 |  |  |  | |  |  ||     |  |  |  |     |\    |  |  |  
 |__| |____||__|__||___,_|  |__|  |_____| \___|  |__|  
                                                       
-Pingtest program by mire\nhttps://github.com/itsonlyMiRE/pingtest\n''', prog='pingtest', formatter_class=argparse.RawTextHelpFormatter)
-parser.add_argument('-G', help='use GUI (all other flags are ignored if this is used)', action='store_true')
-parser.add_argument('-a', help='address to ping (or use \'-a F\' to use first hop router)', metavar='<address>')
-parser.add_argument('-d', help='duration of test (DEFAULT: 10)', metavar='<seconds>', type=int)
-parser.add_argument('-f', help='frequency in pings per second (DEFAULT: 50, but 1 on Windows unless using threading)', metavar='<pings/second>', type=int)
-parser.add_argument('-t', help='threshold of acceptable ping time (DEFAULT: 60)', metavar='<milliseconds>', type=int)
-parser.add_argument('-T', help='enable threading approach (highly recommended for Windows users)', action='store_true')
+Pingtest program by mire\nhttps://github.com/itsonlyMiRE/pingtest \n''', prog='pingtest', formatter_class=argparse.RawTextHelpFormatter)
+
+parser.add_argument('-G',
+    help='use GUI (all other flags are ignored if this is used)',
+    action='store_true')
+parser.add_argument('-a',
+    help='address to ping (or use \'-a F\' to use first hop router)',
+    metavar='<address>')
+parser.add_argument('-d',
+    help='duration of test (DEFAULT: 10)',
+    metavar='<seconds>',
+    type=int)
+parser.add_argument('-f',
+    help='frequency in pings per second (DEFAULT: 50, but 1 on Windows unless using threading)',
+    metavar='<pings/second>',
+    type=int)
+parser.add_argument('-t',
+    help='threshold of acceptable ping time (DEFAULT: 60)',
+    metavar='<milliseconds>',
+    type=int)
+parser.add_argument('-T',
+    help='enable threading approach (highly recommended for Windows users)',
+    action='store_true')
 args = parser.parse_args()
+
 # target address
 if args.a == 'F':
     try:
         # find first hop, handle OS properly
         if _OS == 'linux':
-            tmp = str(subprocess.check_output('traceroute google.com -m 2', stderr=subprocess.STDOUT, shell=True))
-            first_hop = re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(tmp))
+            _tmp = str(subprocess.check_output('traceroute google.com -m 2',
+                stderr=subprocess.STDOUT, shell=True))
+            _first_hop = re.findall(r'\s+2\s+\d+.\d+.\d+.\d+',
+                str(_tmp))
         elif _OS == 'win32':
-            tmp = str(subprocess.check_output('tracert -4 -h 2 google.com', stderr=subprocess.STDOUT, shell=True))
-            first_hop_line = re.findall('2\s+\d+\sms\s+\d+\sms\s+\d+\sms\s+\d+.\d+.\d+.\d+', str(tmp))[0]
-            first_hop = re.findall('s\s+\d+.\d+.\d+.\d+', first_hop_line)
-        
-        if len(first_hop) != 0:
-            _addr = ''.join(first_hop[0].split())[1:]
+            _tmp = str(subprocess.check_output('tracert -4 -h 2 google.com',
+                stderr=subprocess.STDOUT, shell=True))
+            _first_hop_line = re.findall(r'2\s+\d+\sms\s+\d+\sms\s+\d+\sms\s+\d+.\d+.\d+.\d+',
+                str(_tmp))[0]
+            _first_hop = re.findall(r's\s+\d+.\d+.\d+.\d+',
+                _first_hop_line)
+
+        if len(_first_hop) != 0:
+            _addr = ''.join(_first_hop[0].split())[1:]
         else:
-            exit('> error retrieving first hop router. try again\n')
-    except subprocess.CalledProcessError as e:
-        first_hop = re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(e.output))
-        if len(first_hop) != 0:
-            _addr = ''.join(first_hop[0].split())[1:]
+            sys.exit('> error retrieving first hop router. try again\n')
+    except subprocess.CalledProcessError as error:
+        _first_hop = re.findall(r'\s+2\s+\d+.\d+.\d+.\d+',
+            str(error.output))
+        if len(_first_hop) != 0:
+            _addr = ''.join(_first_hop[0].split())[1:]
         else:
-            exit('> error retrieving first hop router. try again')
+            sys.exit('> error retrieving first hop router. try again')
 else:
     _addr = args.a
 # frequency
-if args.f == None:
+if args.f is None:
     if _OS == 'linux':
         _freq = round(1 / 50, 2)
     elif _OS == 'win32' and args.T:
@@ -75,10 +115,10 @@ if args.f == None:
 elif args.f and _OS == 'win32':
     if not args.T:
         print('> frequency is not supported on Windows without threading enabled (-T)\n')
-        exit()
+        sys.exit()
     elif args.T:
         _freq = round(1 / args.f, 2)
-else:    
+else:
     if _OS == 'linux':
         if (int(args.f) < 1) or (int(args.f) > 50):
             invalid_input()
@@ -86,14 +126,14 @@ else:
     elif _OS == 'win32':
         _freq = 1
 # duration
-if args.d == None:
+if args.d is None:
     _duration = 10
 else:
     if (args.d < 1) or (args.d > 120):
         invalid_input()
     _duration = args.d
 # threshold
-if args.t == None:
+if args.t is None:
     _threshold = 60
 else:
     if (args.t < 1) or (args.t > 1000):
@@ -114,6 +154,9 @@ def update_progress_label():
     return f'Progress: {round(prog_bar['value'])}%' '''
 
 def progress(duration):
+    """
+    CLI progress bar.
+    """
     value = 1
     size = 50 # number of * in progress bar
     print()
@@ -125,34 +168,37 @@ def progress(duration):
     print('\n')
 
 def generate_graph(threshold, times):
+    """
+    Generates matplotlib graph.
+    """
     # set x and y values
-    x=[]
+    x_vals=[]
     for i in range(1,len(times)+1):
-        x.append(i)
-    y = np.array(times)
+        x_vals.append(i)
+    y_vals = np.array(times)
 
     # define thresholds
-    above_threshold = np.maximum(y - int(threshold), 0)
-    below_threshold = np.minimum(y, int(threshold))
+    above_threshold = np.maximum(y_vals - int(threshold), 0)
+    below_threshold = np.minimum(y_vals, int(threshold))
 
     # create bar graph using data
     plt.style.use('dark_background')
 
     try:
-        fig, ax = plt.subplots(1,1,figsize=(11,6))
-        ax.bar(x, below_threshold, 0.35, color='g')
-        ax.bar(x, above_threshold, 0.35, color='r',
+        fig, axes = plt.subplots(1,1,figsize=(11,6))
+        axes.bar(x_vals, below_threshold, 0.35, color='g')
+        axes.bar(x_vals, above_threshold, 0.35, color='r',
                 bottom=below_threshold)
-        ax.axhline(int(threshold), color='gray')
-        ax.set_ylabel('Ping times (ms)')
-        ax.set_xlabel('Pings')
+        axes.axhline(int(threshold), color='gray')
+        axes.set_ylabel('Ping times (ms)')
+        axes.set_xlabel('Pings')
     except ValueError:
         print('> OOPS! ValueError, something went wrong. Try again.\n')
-        exit()
+        sys.exit()
 
-    if args.G == True:
+    if args.G is True:
         # draw plot
-        canvas = FigureCanvasTkAgg(fig, master = root)  
+        canvas = FigureCanvasTkAgg(fig, master = root)
         canvas.draw()
         # placing the canvas on the Tkinter window
         canvas.get_tk_widget().grid(row=1,column=3,rowspan=10,padx=30,pady=15)
@@ -163,19 +209,29 @@ late_count = []
 _times = []
 
 def send_ping(addr):
+    """
+    Function responsible for calling the OS command to send individual ping.
+    """
     try:
         if _OS == 'linux':
-            _times.append(round(float(re.findall('time=\d+\.*\d* ms', (str(subprocess.check_output(f'ping {addr} -c 1', stderr=subprocess.STDOUT, shell=True))))[0].replace('time=', '').replace(' ms', ''))))
+            _times.append(round(float(re.findall(r'time=\d+\.*\d* ms',
+                (str(subprocess.check_output(f'ping {addr} -c 1',
+                stderr=subprocess.STDOUT, shell=True))))[0].replace('time=', '').replace(' ms', ''))))
         elif _OS == 'win32':
-            _times.append(round(float(re.findall('time=\d+\.*\d*ms', (str(subprocess.check_output(f'ping -n 1 {addr}', stderr=subprocess.STDOUT, shell=True))))[0].replace('time=', '').replace('ms', ''))))
-    except subprocess.CalledProcessError as e:
+            _times.append(round(float(re.findall(r'time=\d+\.*\d*ms',
+                (str(subprocess.check_output(f'ping -n 1 {addr}',
+                stderr=subprocess.STDOUT, shell=True))))[0].replace('time=', '').replace('ms', ''))))
+    except subprocess.CalledProcessError:
         print('> Error running ping test (possibly due to lost packet or invalid address)\n')
         return 0
-    
+
     if _times[-1] > int(_threshold):
         late_count.append(None)
 
-def perform_pingtest(addr, freq, num_pings, threshold):
+def perform_pingtest(addr, freq, num_pings):
+    """
+    This function handles the bulk of organizing parameters to conduct pings.
+    """
     use_threading = False
     if args.T and not args.G:
         use_threading = True
@@ -199,25 +255,29 @@ def perform_pingtest(addr, freq, num_pings, threshold):
     else:
         try:
             if _OS == 'linux':
-                output = re.findall('time=\d+\.*\d* ms', str(subprocess.check_output(f'sudo ping {addr} -i {freq} -c {num_pings}', stderr=subprocess.STDOUT, shell=True)))
+                output = re.findall(r'time=\d+\.*\d* ms',
+                    str(subprocess.check_output(f'sudo ping {addr} -i {freq} -c {num_pings}',
+                        stderr=subprocess.STDOUT, shell=True)))
                 for i in range(len(output)):
                     _times.append(round(float(output[i].replace('time=', '').replace(' ms', ''))))
                     if _times[-1] > int(_threshold):
                         late_count.append(None)
             elif _OS == 'win32':
-                output = re.findall('time=\d+\.*\d*ms', str(subprocess.check_output(f'ping -n {num_pings} {addr}', stderr=subprocess.STDOUT, shell=True)))
+                output = re.findall(r'time=\d+\.*\d*ms',
+                    str(subprocess.check_output(f'ping -n {num_pings} {addr}',
+                        stderr=subprocess.STDOUT, shell=True)))
                 for i in range(len(output)):
                     _times.append(round(float(output[i].replace('time=', '').replace('ms', ''))))
                     if _times[-1] > int(_threshold):
                         late_count.append(None)
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             print('> Error running ping test (possibly due to invalid address)\n')
             return 0
     if not args.G:
         prog.join()
     if len(_times) != '0':
         late_pct = len(late_count) / int(num_pings)
-        if args.G == False:
+        if args.G is False:
             print('> late packets: ' + str(len(late_count)) + ' (' + str(round((late_pct*100), 2)) + '%)')
             print('> showing charted results...\n')
         else:
@@ -226,39 +286,44 @@ def perform_pingtest(addr, freq, num_pings, threshold):
             info_box.insert(END, '> showing charted results...\n')
             info_box.config(state='disabled')
         return _times
-    else:
-        return 0
-    
+    return 0
+
 def _run():
+    """
+    Main run of the program for GUI.
+    """
     # assign parameters of test
     addr = text_box.get()
     if addr == '':
         # find first hop, handle OS properly
         if _OS == 'linux':
-            tmp = str(subprocess.check_output('traceroute google.com -m 2', stderr=subprocess.STDOUT, shell=True))
-            first_hop = re.findall('\s+2\s+\d+.\d+.\d+.\d+', str(tmp))
+            tmp = str(subprocess.check_output('traceroute google.com -m 2',
+                stderr=subprocess.STDOUT, shell=True))
+            first_hop = re.findall(r'\s+2\s+\d+.\d+.\d+.\d+', str(tmp))
         elif _OS == 'win32':
-            tmp = str(subprocess.check_output('tracert -4 -h 2 google.com', stderr=subprocess.STDOUT, shell=True))
+            tmp = str(subprocess.check_output('tracert -4 -h 2 google.com',
+                stderr=subprocess.STDOUT, shell=True))
             #tmp = '2\t313 ms\t\t25 ms\t\t 275 ms\t\t 10.134.0.1'
-            first_hop_line = re.findall('2\s+\d+\sms\s+\d+\sms\s+\d+\sms\s+\d+.\d+.\d+.\d+', str(tmp))[0]
-            first_hop = re.findall('s\s+\d+.\d+.\d+.\d+', first_hop_line)
+            first_hop_line = re.findall(r'2\s+\d+\sms\s+\d+\sms\s+\d+\sms\s+\d+.\d+.\d+.\d+',
+                str(tmp))[0]
+            first_hop = re.findall(r's\s+\d+.\d+.\d+.\d+', first_hop_line)
         if len(first_hop) != 0:
             addr = ''.join(first_hop[0].split())[1:]
         else:
-            exit('> error retrieving first hop router. try again\n')
+            sys.exit('> error retrieving first hop router. try again\n')
     freq = round(1 / freq_slider.get(), 2)
     duration = duration_slider.get()
     threshold = threshold_slider.get()
     num_pings = round(duration / freq)
-    
+
     # begin pinging using chosen arguments
     info_box.config(state='normal')
     info_box.delete('1.0', END)
     info_box.insert(END, f'> starting {num_pings} pings on {addr}...\n')
     info_box.config(state='disabled')
     root.update_idletasks()
-    data = perform_pingtest(addr, freq, num_pings, threshold)
-    
+    data = perform_pingtest(addr, freq, num_pings)
+
     # generate and show graph
     if data != 0:
         generate_graph(threshold, data)
@@ -269,7 +334,7 @@ def _run():
 
 if __name__ == '__main__':
     # if GUI is used, begin making Tkinter stuff
-    if args.G == True:
+    if args.G is True:
         root = Tk()
         root.title('Pingtest GUI')
         root.geometry('1600x920')
@@ -280,7 +345,8 @@ if __name__ == '__main__':
         blank1.grid(padx=20, pady=20, row=1, column=1)
 
         # text boss for address input
-        box_label = Label(root, text='Address to Ping (leave blank for first hop router)', bg='#292929', fg='#FFFFFF')
+        box_label = Label(root, text='Address to Ping (leave blank for first hop router)',
+            bg='#292929', fg='#FFFFFF')
         box_label.grid(row=2, column=1)
         text_box = Entry(root)
         text_box.grid(padx=20, row=3, column=1)
@@ -294,17 +360,22 @@ if __name__ == '__main__':
         blank3.grid(padx=20, row=0, column=3)
 
         # ping frequency slider
-        freq_slider = Scale(root, from_=1, to=50, length=400, resolution=1, orient=HORIZONTAL, label='Frequency (pings/second)', bg='#292929', fg='#FFFFFF', highlightbackground='#292929')
+        freq_slider = Scale(root, from_=1, to=50, length=400, resolution=1, orient=HORIZONTAL,
+            label='Frequency (pings/second)', bg='#292929', fg='#FFFFFF',
+            highlightbackground='#292929')
         freq_slider.set(50)
         freq_slider.grid(padx=20, pady=20, row=5, column=1)
 
         # test duration slider
-        duration_slider = Scale(root, from_=1, to=120, length=400, resolution=1, orient=HORIZONTAL, label='Duration (seconds)', bg='#292929', fg='#FFFFFF', highlightbackground='#292929')
+        duration_slider = Scale(root, from_=1, to=120, length=400, resolution=1, orient=HORIZONTAL,
+            label='Duration (seconds)', bg='#292929', fg='#FFFFFF', highlightbackground='#292929')
         duration_slider.set(10)
         duration_slider.grid(padx=20, pady=20, row=6, column=1)
 
         # acceptable ping slider
-        threshold_slider = Scale(root, from_=5, to=150, length=400, resolution=1, orient=HORIZONTAL, label='Acceptable Delay (ms)', bg='#292929', fg='#FFFFFF', highlightbackground='#292929')
+        threshold_slider = Scale(root, from_=5, to=150, length=400, resolution=1, orient=HORIZONTAL,
+            label='Acceptable Delay (ms)', bg='#292929', fg='#FFFFFF',
+            highlightbackground='#292929')
         threshold_slider.set(60)
         threshold_slider.grid(padx=20, pady=20, row=7, column=1)
 
@@ -315,8 +386,8 @@ if __name__ == '__main__':
         # threading tick box
         thread_tick_value = BooleanVar()
         threading_tick = Checkbutton(root, text='Use threading (highly recommended for Windows)',
-                                        bg='#292929', fg='#FFFFFF', activebackground='#292929', 
-                                        activeforeground='#FFFFFF', highlightcolor='#292929', 
+                                        bg='#292929', fg='#FFFFFF', activebackground='#292929',
+                                        activeforeground='#FFFFFF', highlightcolor='#292929',
                                         highlightbackground='#292929', selectcolor='#000000',
                                         variable=thread_tick_value)
         threading_tick.grid(row=9, column=1)
@@ -350,24 +421,26 @@ if __name__ == '__main__':
 
         print('> Launching GUI...\n')
         root.mainloop()
-    
+
     # if GUI is not used, perform in CLI
     else:
-        if args.a == None:
+        if args.a is None:
             print('\nERROR: one of the two flags -a or -G must be used. Use -h flag for help.\n')
         else:
             print(f'\n> starting {_num_pings} pings on {_addr}...')
             try:
                 if _OS == 'linux':
-                    test_ping = str(subprocess.check_output(f'ping {_addr} -c 1', stderr=subprocess.STDOUT, shell=True))
+                    test_ping = str(subprocess.check_output(f'ping {_addr} -c 1',
+                    stderr=subprocess.STDOUT, shell=True))
                 elif _OS == 'win32':
-                    test_ping = str(subprocess.check_output(f'ping -n 1 {_addr}', stderr=subprocess.STDOUT, shell=True))
-                data = perform_pingtest(_addr, _freq, _num_pings, _threshold)
-                if data != 0:
-                    generate_graph(_threshold, data)
+                    test_ping = str(subprocess.check_output(f'ping -n 1 {_addr}',
+                        stderr=subprocess.STDOUT, shell=True))
+                _data = perform_pingtest(_addr, _freq, _num_pings)
+                if _data != 0:
+                    generate_graph(_threshold, _data)
                 else:
                     print("> error occurred in ping test\n")
-            except subprocess.CalledProcessError as e:
+            except subprocess.CalledProcessError:
                 print('> Error running ping test (possibly due to invalid address)\n')
 
 # EOF
